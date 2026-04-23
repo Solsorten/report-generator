@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Report Generator</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,300&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --navy:   #001965;
+  --teal:   #028090;
+  --green:  #d4edda;
+  --white:  #ffffff;
+  --off:    #f5f7fa;
+  --border: #dde3ec;
+  --text:   #1a2340;
+  --muted:  #6b7a99;
+  --ok:     #0a6640;
+  --okbg:   #f0faf4;
+  --okline: #a8d5b5;
+  --errbg:  #fff5f5;
+  --errline:#fed7d7;
+  --errtxt: #c53030;
+}
+
+html, body { min-height: 100vh; font-family: 'DM Sans', sans-serif; background: var(--off); color: var(--text); }
+
+body { display: flex; flex-direction: column; align-items: center; padding: 3rem 1.5rem 4rem; }
+
+/* ── Header ── */
+.header { text-align: center; margin-bottom: 2.5rem; }
+.logo { display: inline-flex; align-items: center; gap: 5px; margin-bottom: 1rem; }
+.logo span { width: 9px; height: 9px; border-radius: 50%; background: var(--navy); }
+.logo span:nth-child(2) { background: var(--teal); transform: scale(.7); }
+.logo span:nth-child(3) { background: var(--navy); opacity: .3; transform: scale(.5); }
+.brand { font-family: 'DM Mono', monospace; font-size: .68rem; letter-spacing: .2em; text-transform: uppercase; color: var(--muted); margin-bottom: .9rem; }
+h1 { font-size: 1.9rem; font-weight: 600; color: var(--navy); letter-spacing: -.03em; line-height: 1.15; margin-bottom: .4rem; }
+.sub { font-size: .88rem; color: var(--muted); font-weight: 300; }
+
+/* ── Card ── */
+.card { background: var(--white); border: 1px solid var(--border); border-radius: 16px; padding: 2rem; width: 100%; max-width: 560px; box-shadow: 0 4px 24px rgba(0,25,101,.07); }
+
+/* ── Drop zone ── */
+.dropzone {
+  border: 2px dashed var(--border); border-radius: 12px;
+  padding: 2.2rem 1.5rem; text-align: center; cursor: pointer;
+  transition: all .2s; position: relative; background: var(--off);
+}
+.dropzone:hover, .dropzone.over { border-color: var(--teal); background: #f0f9fa; }
+.dropzone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+.dz-icon { width: 42px; height: 42px; margin: 0 auto .9rem; background: var(--navy); border-radius: 10px; display: flex; align-items: center; justify-content: center; }
+.dz-label { font-size: .88rem; font-weight: 500; color: var(--text); margin-bottom: .2rem; }
+.dz-hint  { font-size: .75rem; color: var(--muted); font-family: 'DM Mono', monospace; }
+
+/* ── File list ── */
+.file-list { margin-top: 1rem; display: flex; flex-direction: column; gap: .5rem; }
+
+.file-row {
+  display: flex; align-items: center; gap: .7rem;
+  background: var(--off); border: 1px solid var(--border);
+  border-radius: 9px; padding: .55rem .85rem;
+  animation: fadeIn .2s ease;
+}
+@keyframes fadeIn { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:translateY(0); } }
+
+.file-row.mapped   { border-color: #c7d2fe; background: #eef2ff; }
+.file-row.unmapped { border-color: var(--errline); background: var(--errbg); }
+
+.file-badge {
+  width: 30px; height: 30px; flex-shrink: 0; border-radius: 6px;
+  background: var(--navy); display: flex; align-items: center; justify-content: center;
+  font-family: 'DM Mono', monospace; font-size: .5rem; font-weight: 500; color: white; letter-spacing: .03em;
+}
+.file-info { flex: 1; min-width: 0; }
+.file-name { font-size: .8rem; font-weight: 500; color: var(--navy); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.file-type { font-size: .7rem; color: var(--muted); font-family: 'DM Mono', monospace; margin-top: 1px; }
+
+/* slide type selector */
+.dim-input {
+  font-size: .75rem; font-family: 'DM Sans', sans-serif;
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: .3rem .6rem; background: white; color: var(--text);
+  outline: none; flex-shrink: 0; width: 140px;
+  transition: border-color .15s;
+}
+.dim-input:focus { border-color: var(--teal); }
+.dim-input::placeholder { color: var(--muted); }
+
+.file-remove { background: none; border: none; cursor: pointer; color: var(--muted); font-size: 1rem; padding: 0 .2rem; flex-shrink: 0; }
+.file-remove:hover { color: var(--errtxt); }
+
+/* order handle */
+.handle { cursor: grab; color: var(--muted); font-size: .9rem; flex-shrink: 0; user-select: none; }
+.handle:active { cursor: grabbing; }
+
+/* ── Divider ── */
+.divider { height: 1px; background: var(--border); margin: 1.5rem 0; }
+
+/* ── Settings ── */
+.section-label { font-size: .7rem; font-weight: 500; letter-spacing: .13em; text-transform: uppercase; color: var(--muted); font-family: 'DM Mono', monospace; margin-bottom: .75rem; }
+.field { margin-bottom: .9rem; }
+.field label { display: block; font-size: .8rem; font-weight: 500; color: var(--text); margin-bottom: .3rem; }
+.field input { width: 100%; padding: .55rem .8rem; border: 1px solid var(--border); border-radius: 8px; font-size: .83rem; font-family: 'DM Sans', sans-serif; color: var(--text); outline: none; transition: border-color .15s; }
+.field input:focus { border-color: var(--teal); }
+.field input::placeholder { color: var(--muted); }
+
+/* ── Slide order preview ── */
+.order-preview { display: none; margin-bottom: 1rem; }
+.order-preview.visible { display: block; }
+.order-chips { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .5rem; }
+.chip {
+  font-size: .7rem; font-family: 'DM Mono', monospace; padding: .25rem .6rem;
+  background: var(--navy); color: white; border-radius: 99px;
+  display: flex; align-items: center; gap: .35rem;
+}
+.chip-num { opacity: .5; }
+
+/* ── Button ── */
+.btn-gen {
+  width: 100%; padding: .82rem; background: var(--navy); color: white; border: none;
+  border-radius: 10px; font-size: .88rem; font-weight: 600; font-family: 'DM Sans', sans-serif;
+  cursor: pointer; transition: all .2s; display: flex; align-items: center; justify-content: center; gap: .5rem;
+  margin-top: 1.25rem;
+}
+.btn-gen:hover:not(:disabled) { background: #002080; transform: translateY(-1px); box-shadow: 0 6px 20px rgba(0,25,101,.25); }
+.btn-gen:disabled { opacity: .4; cursor: not-allowed; transform: none; }
+
+/* ── Progress ── */
+.prog { display: none; margin-top: 1rem; }
+.prog.visible { display: block; }
+.prog-bg { height: 4px; background: var(--border); border-radius: 99px; overflow: hidden; }
+.prog-fill { height: 100%; background: linear-gradient(90deg, var(--navy), var(--teal)); width: 0%; transition: width .3s ease; }
+.prog-label { font-size: .75rem; color: var(--muted); font-family: 'DM Mono', monospace; margin-top: .45rem; text-align: center; }
+
+/* ── Result ── */
+.result { display: none; margin-top: 1rem; background: var(--okbg); border: 1px solid var(--okline); border-radius: 10px; padding: .9rem 1.1rem; text-align: center; }
+.result.visible { display: block; }
+.result-label { font-size: .73rem; color: var(--ok); font-family: 'DM Mono', monospace; font-weight: 500; text-transform: uppercase; letter-spacing: .1em; margin-bottom: .55rem; }
+.btn-dl { display: inline-flex; align-items: center; gap: .45rem; padding: .6rem 1.2rem; background: var(--ok); color: white; border-radius: 8px; font-size: .83rem; font-weight: 600; text-decoration: none; transition: all .15s; }
+.btn-dl:hover { background: #084d30; transform: translateY(-1px); }
+
+/* ── Error ── */
+.err { display: none; margin-top: .9rem; background: var(--errbg); border: 1px solid var(--errline); border-radius: 8px; padding: .7rem .9rem; font-size: .79rem; color: var(--errtxt); font-family: 'DM Mono', monospace; }
+.err.visible { display: block; }
+
+/* ── Footer ── */
+.footer { margin-top: 1.75rem; font-size: .72rem; color: var(--muted); font-family: 'DM Mono', monospace; opacity: .65; }
+
+/* empty state */
+.empty-hint { font-size: .78rem; color: var(--muted); text-align: center; padding: .5rem 0; font-family: 'DM Mono', monospace; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo"><span></span><span></span><span></span></div>
+  <div class="brand">Report Generator</div>
+  <h1>PowerPoint<br>Generator</h1>
+  <p class="sub">Drop your CSV exports → get a full PowerPoint deck</p>
+</div>
+
+<div class="card">
+
+  <!-- Drop zone -->
+  <div class="dropzone" id="dropzone">
+    <input type="file" id="fileInput" accept=".csv" multiple>
+    <div class="dz-icon">
+      <svg width="20" height="20" fill="none" stroke="white" stroke-width="2" viewBox="0 0 24 24">
+        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+      </svg>
+    </div>
+    <div class="dz-label">Drop all your CSV files here</div>
+    <div class="dz-hint">multiple files supported · click to browse</div>
+  </div>
+
+  <!-- File list -->
+  <div class="file-list" id="fileList">
+    <p class="empty-hint" id="emptyHint" style="display:none">No files yet — drop your CSVs above</p>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- Slide order preview -->
+  <div class="order-preview" id="orderPreview">
+    <div class="section-label">Slide order</div>
+    <div class="order-chips" id="orderChips"></div>
+    <div class="divider" style="margin-top:1rem"></div>
+  </div>
+
+  <!-- Settings -->
+  <div class="section-label">Report settings</div>
+  <div class="field">
+    <label for="deckTitle">Deck / file name</label>
+    <input type="text" id="deckTitle" placeholder="e.g. Q1 2026 Report" value="">
+  </div>
+  <div class="field">
+    <label for="sourceText">Source line (appears on every slide)</label>
+    <input type="text" id="sourceText" placeholder="e.g. Source: Adobe Analytics, Jan–Dec 2026" value="">
+  </div>
+
+  <button class="btn-gen" id="btnGen" disabled>
+    <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+      <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+    </svg>
+    Generate PowerPoint
+  </button>
+
+  <div class="prog" id="prog">
+    <div class="prog-bg"><div class="prog-fill" id="progFill"></div></div>
+    <div class="prog-label" id="progLabel">Starting…</div>
+  </div>
+
+  <div class="result" id="result">
+    <div class="result-label">✓ Deck ready</div>
+    <a class="btn-dl" id="dlLink" href="#" download>
+      <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+      </svg>
+      Download .pptx
+    </a>
+  </div>
+
+  <div class="err" id="errMsg"></div>
+</div>
+
+<div class="footer">runs 100% offline · no data leaves your browser</div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// SLIDE TYPE DEFINITIONS
+// Each entry defines: label, how to detect from filename, and which columns to show
+// ─────────────────────────────────────────────────────────────────────────────
+const SLIDE_TYPES = [
+  {
+    id: 'slide',
+    label: 'Slide',
+    keywords: [],
+    colMap: null,
+    headers: null,
+    totalsLabel: 'Total',
+    formatters: null,
+  },
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────────────────────────────────────────
+let files = [];   // [{ id, file, type }]
+let nextId = 0;
+
+function detectType(filename) { return 'slide'; }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DOM REFS
+// ─────────────────────────────────────────────────────────────────────────────
+const dropzone    = document.getElementById('dropzone');
+const fileInput   = document.getElementById('fileInput');
+const fileListEl  = document.getElementById('fileList');
+const emptyHint   = document.getElementById('emptyHint');
+const orderPreview= document.getElementById('orderPreview');
+const orderChips  = document.getElementById('orderChips');
+const btnGen      = document.getElementById('btnGen');
+const progEl      = document.getElementById('prog');
+const progFill    = document.getElementById('progFill');
+const progLabel   = document.getElementById('progLabel');
+const resultEl    = document.getElementById('result');
+const dlLink      = document.getElementById('dlLink');
+const errMsg      = document.getElementById('errMsg');
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FILE HANDLING
+// ─────────────────────────────────────────────────────────────────────────────
+function addFiles(newFiles) {
+  for (const f of newFiles) {
+    if (!f.name.endsWith('.csv')) continue;
+    if (files.find(x => x.file.name === f.name)) continue;
+    files.push({ id: nextId++, file: f, type: detectType(f.name), dimension: '' });
+    // read CSV header to auto-detect dimension name
+    const reader = new FileReader();
+    const fRef = files[files.length - 1];
+    reader.onload = e => {
+      const text = e.target.result.replace(/^\uFEFF/, '');
+      const lines = text.split('\n');
+      const headerIdx = lines.findIndex(l => l.startsWith(',') && l.includes(','));
+      if (headerIdx >= 0) {
+        // first data row's label column is col 0 of the data, but the
+        // dimension name is the header of that column — which is actually
+        // the CSV filename section header line above, OR we read it from
+        // the first non-empty value in col 0 of the header row
+        // The Adobe Analytics header row starts with a comma, so col 0 is empty.
+        // The dimension label is the section title line (## ... ##) above it.
+        const sectionLine = lines.slice(0, headerIdx).reverse().find(l => l.startsWith('#') && !l.startsWith('##'));
+        const sectionMatch = sectionLine ? sectionLine.replace(/#/g,'').trim() : '';
+        // fallback: use filename stripped
+        const fromFilename = fRef.file.name.replace(/\.csv$/i,'').replace(/[-_]/g,' ').replace(/\w/g,c=>c.toUpperCase());
+        fRef.dimension = sectionMatch || fromFilename;
+        render();
+      }
+    };
+    reader.readAsText(f);
+  }
+  render();
+}
+
+function removeFile(id) {
+  files = files.filter(f => f.id !== id);
+  render();
+}
+
+function setDimension(id, val) {
+  const f = files.find(x => x.id === id);
+  if (f) f.dimension = val;
+  // update chips without full re-render to avoid losing input focus
+  updateChips();
+}
+
+function updateChips() {
+  orderChips.innerHTML = files.map((f, i) =>
+    `<div class="chip"><span class="chip-num">${i+1}</span>${f.dimension ? f.dimension : 'Slide ' + (i+1)}</div>`
+  ).join('');
+}
+
+
+
+fileInput.addEventListener('change', e => { addFiles([...e.target.files]); fileInput.value = ''; });
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('over'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('over'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault(); dropzone.classList.remove('over');
+  addFiles([...e.dataTransfer.files]);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RENDER
+// ─────────────────────────────────────────────────────────────────────────────
+function render() {
+  // Clear file list (keep emptyHint)
+  [...fileListEl.children].forEach(c => { if (c !== emptyHint) c.remove(); });
+
+  emptyHint.style.display = files.length === 0 ? 'block' : 'none';
+
+  files.forEach((entry, idx) => {
+    const typeInfo = SLIDE_TYPES.find(t => t.id === entry.type);
+    const row = document.createElement('div');
+    row.className = 'file-row ' + (entry.type !== 'custom' ? 'mapped' : '');
+    row.dataset.id = entry.id;
+
+    row.innerHTML = `
+      <span class="handle" title="Drag to reorder">⠿</span>
+      <div class="file-badge">CSV</div>
+      <div class="file-info">
+        <div class="file-name">${entry.file.name}</div>
+        <div class="file-type">Slide ${idx + 1}</div>
+      </div>
+      <input class="dim-input" type="text" value="${entry.dimension}" placeholder="Dimension (e.g. Country)"
+        oninput="setDimension(${entry.id}, this.value)" title="Row label / dimension name">
+      <button class="file-remove" onclick="removeFile(${entry.id})" title="Remove">✕</button>
+    `;
+    fileListEl.appendChild(row);
+  });
+
+  // Order chips
+  if (files.length > 0) {
+    orderPreview.classList.add('visible');
+    updateChips();
+  } else {
+    orderPreview.classList.remove('visible');
+  }
+
+  btnGen.disabled = files.length === 0;
+  hideResult(); hideErr();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CSV PARSING
+// ─────────────────────────────────────────────────────────────────────────────
+function parseCSV(text, slideType) {
+  const lines = text.replace(/^\uFEFF/, '').split('\n').map(l => l.replace(/\r$/, ''));
+
+  // Adobe Analytics CSVs: header row starts with a comma (col 0 = dimension name, blank in header)
+  // Data rows: DimensionValue,metric1,metric2,...
+  const headerIdx = lines.findIndex(l => l.startsWith(',') && l.split(',').length > 3);
+  if (headerIdx < 0) throw new Error('Could not find data header row.');
+
+  const rawHeader = lines[headerIdx].split(',');
+  // col 0 is blank (dimension), cols 1+ are metric names
+  // Skip the totals row (headerIdx+1) — it has the dimension name as label
+  const dataLines = lines.slice(headerIdx + 2);
+
+  // Column mapping:
+  // col 0 = dimension label (country, channel, page...)
+  // col 1 = Visits
+  // col 6 = Avg Time on Site
+  // col 7 = Video & Download Rate
+  // But detect gracefully: find "visits" col, avgTime col, vdRate col by header name
+  const hLower = rawHeader.map(h => h.trim().toLowerCase());
+  const visitsIdx  = hLower.findIndex(h => h.includes('visit'));
+  const avgTimeIdx = hLower.findIndex(h => h.includes('time') || h.includes('avg'));
+  const vdRateIdx  = hLower.findIndex(h => h.includes('video') || h.includes('download'));
+
+  const colMap = {
+    label:   0,                                      // always first column
+    visits:  visitsIdx  > 0 ? visitsIdx  : 1,
+    avgTime: avgTimeIdx > 0 ? avgTimeIdx : 6,
+    vdRate:  vdRateIdx  > 0 ? vdRateIdx  : 7,
+  };
+
+  const headers = [
+    'Dimension',                                     // will be overridden by user's dimension input
+    rawHeader[colMap.visits]?.trim()  || 'Visits',
+    rawHeader[colMap.avgTime]?.trim() || 'Avg time on site',
+    rawHeader[colMap.vdRate]?.trim()  || 'Video & Download Rate',
+  ];
+
+  const rows = [];
+  for (const line of dataLines) {
+    if (!line.trim()) continue;
+    const parts = line.split(',');
+    const label = parts[0]?.trim();
+    if (!label) continue;
+    rows.push({
+      label,
+      visits:  parseInt(parts[colMap.visits])   || 0,
+      avgTime: parseFloat(parts[colMap.avgTime]) || 0,
+      vdRate:  parseFloat(parts[colMap.vdRate])  || 0,
+    });
+  }
+
+  if (rows.length === 0) throw new Error('No data rows found.');
+
+  const totalVisits = rows.reduce((a, r) => a + r.visits, 0);
+  const avgTime = totalVisits > 0 ? rows.reduce((a, r) => a + r.avgTime * r.visits, 0) / totalVisits : 0;
+  const vdRate  = totalVisits > 0 ? rows.reduce((a, r) => a + r.vdRate  * r.visits, 0) / totalVisits : 0;
+
+  return { rows, headers, totalsLabel: 'Total', totalVisits, avgTime, vdRate };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FORMATTERS
+// ─────────────────────────────────────────────────────────────────────────────
+const fmtTime   = v => { const m = Math.floor(v/60), s = Math.round(v%60); return `${m}m ${s}s`; };
+const fmtPct    = v => { const p = v*100; return (p%1 === 0 ? p.toFixed(0) : p.toFixed(1)) + '%'; };
+const fmtVisits = v => v.toLocaleString('en-US');
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BUILD ONE SLIDE
+// ─────────────────────────────────────────────────────────────────────────────
+function addSlide(pres, data, slideTitle, sourceText, dimension) {
+  const NAVY  = '001965';
+  const TEAL  = '028090';
+  const GREEN = 'D4EDDA';
+  const WHITE = 'FFFFFF';
+
+  const slide = pres.addSlide();
+  slide.background = { color: WHITE };
+
+  // Title
+  slide.addText(slideTitle, {
+    x: 0.43, y: 0.74, w: 11.4, h: 0.97,
+    fontSize: 32, color: TEAL, fontFace: 'Calibri', valign: 'middle',
+  });
+
+  // Slide number placeholder
+  slide.addText('', {
+    x: 0.34, y: 0.34, w: 0.34, h: 0.13,
+    fontSize: 7, color: NAVY, fontFace: 'Calibri',
+  });
+
+  // Insights box
+  slide.addShape(pres.shapes.RECTANGLE, {
+    x: 8.63, y: 1.83, w: 3.82, h: 4.07,
+    fill: { color: WHITE }, line: { color: TEAL, width: 0.75 },
+  });
+  slide.addText('Insights', {
+    x: 8.90, y: 1.70, w: 2.80, h: 0.32,
+    fontSize: 14, color: NAVY, fontFace: 'Calibri', align: 'center',
+    fill: { color: WHITE }, line: { color: TEAL, width: 0.75 },
+  });
+  slide.addText([{ text: 'Write insight', options: { bullet: true } }], {
+    x: 8.72, y: 2.05, w: 3.60, h: 0.33,
+    fontSize: 10, color: NAVY, fontFace: 'Calibri',
+  });
+
+  // ── Table ──
+  const displayRows = data.rows.slice(0, 10);
+
+  const hdr = (txt, align = 'center') => ({
+    text: txt,
+    options: {
+      bold: true, fontSize: 11, color: NAVY, align, fontFace: 'Calibri', valign: 'middle',
+      fill: { color: WHITE },
+      border: [{ type: 'none' }, { type: 'none' }, { type: 'solid', pt: 1, color: NAVY }, { type: 'none' }],
+    }
+  });
+
+  const tot = (txt, align = 'center') => ({
+    text: txt,
+    options: {
+      bold: true, italic: true, fontSize: 11, color: NAVY, align, fontFace: 'Calibri', valign: 'middle',
+      fill: { color: WHITE },
+      border: [
+        { type: 'solid', pt: 1, color: NAVY }, { type: 'none' },
+        { type: 'solid', pt: 1, color: NAVY }, { type: 'none' }
+      ],
+    }
+  });
+
+  const cell = (txt, align = 'center', alt = false, bold = false) => ({
+    text: txt,
+    options: {
+      bold, fontSize: 11, color: NAVY, align, fontFace: 'Calibri', valign: 'middle',
+      fill: { color: alt ? GREEN : WHITE },
+      border: [{ type: 'solid', pt: 0.5, color: NAVY }, { type: 'none' }, { type: 'none' }, { type: 'none' }],
+    }
+  });
+
+  const tableData = [
+    [ hdr(dimension || data.headers[0] || 'Item', 'left'), hdr(data.headers[1] || 'Visits'), hdr(data.headers[2] || 'Avg time on site'), hdr(data.headers[3] || 'Video & Download Rate') ],
+    [ tot(data.totalsLabel, 'left'), tot(fmtVisits(data.totalVisits)), tot(fmtTime(data.avgTime)), tot(fmtPct(data.vdRate)) ],
+    ...displayRows.map((r, i) => [
+      cell(r.label, 'left', i%2!==0),
+      cell(fmtVisits(r.visits), 'center', i%2!==0, true),
+      cell(fmtTime(r.avgTime), 'center', i%2!==0),
+      cell(fmtPct(r.vdRate), 'center', i%2!==0),
+    ])
+  ];
+
+  slide.addTable(tableData, {
+    x: 0.55, y: 1.83, w: 7.56,
+    rowH: 0.33,
+    colW: [1.83, 1.23, 2.25, 2.25],
+    border: { type: 'solid', pt: 0.75, color: TEAL },
+  });
+
+  // Footnote
+  slide.addShape(pres.shapes.LINE, {
+    x: 0.43, y: 6.69, w: 12.10, h: 0,
+    line: { color: 'C0C0C0', width: 0.5 },
+  });
+  slide.addText(sourceText, {
+    x: 0.43, y: 6.75, w: 12.10, h: 0.40,
+    fontSize: 8, color: '808080', fontFace: 'Calibri', align: 'right',
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MAIN GENERATE
+// ─────────────────────────────────────────────────────────────────────────────
+btnGen.addEventListener('click', async () => {
+  if (files.length === 0) return;
+  btnGen.disabled = true;
+  hideResult(); hideErr();
+
+  const deckTitle  = document.getElementById('deckTitle').value  || 'Report';
+  const sourceText = document.getElementById('sourceText').value || '';
+
+  try {
+    const pres = new PptxGenJS();
+    pres.layout = 'LAYOUT_WIDE';
+    pres.title  = deckTitle;
+
+    for (let i = 0; i < files.length; i++) {
+      const entry = files[i];
+      const pct = Math.round(10 + (i / files.length) * 80);
+      setProgress(pct, `Building slide ${i+1}/${files.length}: ${entry.file.name}`);
+
+      const text = await entry.file.text();
+      const data = parseCSV(text, entry.type);
+
+      // Use filename (without extension) as slide title, cleaned up
+      const autoTitle = entry.file.name
+        .replace(/\.csv$/i, '')
+        .replace(/[-_]/g, ' ')
+        .replace(/\b\w/g, c => c.toUpperCase());
+
+      addSlide(pres, data, autoTitle, sourceText, entry.dimension);
+    }
+
+    setProgress(95, 'Packaging PPTX…');
+    const blob = await pres.write({ outputType: 'blob' });
+
+    setProgress(100, 'Done!');
+    setTimeout(() => {
+      hideProgress();
+      const url = URL.createObjectURL(blob);
+      const filename = deckTitle.replace(/[^a-z0-9]/gi, '_') + '.pptx';
+      dlLink.href = url;
+      dlLink.download = filename;
+      resultEl.classList.add('visible');
+      btnGen.disabled = false;
+    }, 350);
+
+  } catch(e) {
+    hideProgress();
+    showErr('Error: ' + e.message);
+    btnGen.disabled = false;
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UI HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+function setProgress(pct, label) { progEl.classList.add('visible'); progFill.style.width = pct+'%'; progLabel.textContent = label; }
+function hideProgress() { progEl.classList.remove('visible'); }
+function showErr(msg) { errMsg.textContent = msg; errMsg.classList.add('visible'); }
+function hideErr() { errMsg.classList.remove('visible'); }
+function hideResult() { resultEl.classList.remove('visible'); }
+
+// Init
+render();
+</script>
+</body>
+</html>
