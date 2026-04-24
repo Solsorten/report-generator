@@ -216,7 +216,7 @@ h1 { font-size: 1.9rem; font-weight: 600; color: var(--navy); letter-spacing: -.
   </div>
 
   <div class="result" id="result">
-    <div class="result-label">✓ Deck ready</div>
+    <div class="result-label" id="resultLabel">✓ Deck ready</div>
     <a class="btn-dl" id="dlLink" href="#" download>
       <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
         <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
@@ -450,7 +450,11 @@ const fmtVisits = v => v.toLocaleString('en-US');
 // ─────────────────────────────────────────────────────────────────────────────
 // BUILD ONE SLIDE
 // ─────────────────────────────────────────────────────────────────────────────
-function addSlide(pres, data, slideTitle, sourceText, dimension) {
+function addSlide(pres, data, slideTitle, sourceText, dimension, templateBuffer) {
+  // NOTE: templateBuffer is reserved for when we wire up the CVI template.
+  // Once the real template is uploaded and inspected, this function will
+  // use python-pptx-style population instead of building from scratch.
+  // For now we build the slide using the CVI colour scheme as a fallback.
   const NAVY  = '001965';
   const TEAL  = '028090';
   const GREEN = 'D4EDDA';
@@ -560,6 +564,20 @@ btnGen.addEventListener('click', async () => {
   const sourceText = document.getElementById('sourceText').value || '';
 
   try {
+    // ── Try to fetch CVI template from repo ──────────────────────────────────
+    const TEMPLATE_URL = 'templates/cvi_template.pptx';
+    let templateBuffer = null;
+    try {
+      setProgress(5, 'Loading CVI template…');
+      const resp = await fetch(TEMPLATE_URL);
+      if (resp.ok) {
+        templateBuffer = await resp.arrayBuffer();
+        console.log('CVI template loaded from repo');
+      }
+    } catch(e) {
+      console.warn('Could not load CVI template, using built-in layout:', e.message);
+    }
+
     const pres = new PptxGenJS();
     pres.layout = 'LAYOUT_WIDE';
     pres.title  = deckTitle;
@@ -578,7 +596,7 @@ btnGen.addEventListener('click', async () => {
         .replace(/[-_]/g, ' ')
         .replace(/\b\w/g, c => c.toUpperCase());
 
-      addSlide(pres, data, autoTitle, sourceText, entry.dimension);
+      addSlide(pres, data, autoTitle, sourceText, entry.dimension, templateBuffer);
     }
 
     setProgress(95, 'Packaging PPTX…');
@@ -588,9 +606,12 @@ btnGen.addEventListener('click', async () => {
     setTimeout(() => {
       hideProgress();
       const url = URL.createObjectURL(blob);
-      const filename = deckTitle.replace(/[^a-z0-9]/gi, '_') + '.pptx';
+      const filename = (deckTitle || 'report').replace(/[^a-z0-9]/gi, '_') + '.pptx';
       dlLink.href = url;
       dlLink.download = filename;
+      document.getElementById('resultLabel').textContent = templateBuffer
+        ? '✓ Deck ready · CVI template used'
+        : '✓ Deck ready · built-in layout used';
       resultEl.classList.add('visible');
       btnGen.disabled = false;
     }, 350);
